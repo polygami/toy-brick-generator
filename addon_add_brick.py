@@ -24,6 +24,7 @@ wall_thickness = 0.16
 stud_radius = 0.24
 stud_segments = 12
 stud_height = 0.16
+tube_radius = 0.3256
 
 def add_object(self, context):
     scale_x = self.scale[0]
@@ -84,6 +85,10 @@ def add_object(self, context):
     # Add studs
     stud_origins = []
 
+    tube_origins = get_origins(h_unit_size, self.scale[0] - 1, self.scale[1] - 1)
+    verts.extend(generate_multiple_cylinder_verts(tube_origins, 12, tube_radius, 0, scale_z - wall_thickness))
+
+
     for x in range(0, self.scale[0]):
         for y in range(0, self.scale[1]):
             origin = Vector((
@@ -91,17 +96,8 @@ def add_object(self, context):
                 (h_unit_size / 2 + h_unit_size * float(y)) - float(scale_y) * 0.5,
                 0)
             )
-            circle_verts = []
-
-            for i in range(0, stud_segments):
-                angle = radians((360 / stud_segments) * i)
-                v_bottom = Vector((sin(angle) * stud_radius, cos(angle) * stud_radius, scale_z))
-                v_top = v_bottom + Vector((0, 0, 1)) * stud_height
-                circle_verts.append(v_bottom - origin)
-                circle_verts.append(v_top - origin)
             
-            verts.extend(circle_verts)
-
+            verts.extend(generate_cylinder_verts(origin, stud_segments, stud_radius, scale_z, stud_height))
             print("Length:")
             print(len(verts))
             r_start = len(verts) - stud_segments * 2
@@ -141,6 +137,32 @@ class OBJECT_OT_add_object(Operator, AddObjectHelper):
         add_object(self, context)
 
         return {'FINISHED'}
+
+def generate_cylinder_verts(origin, segments, radius, bottom_height, height):
+    result = []
+    for i in range(0, segments):
+        angle = radians((360 / segments) * i)
+        v_bottom = Vector((sin(angle) * radius, cos(angle) * radius, bottom_height))
+        v_top = v_bottom + Vector((0, 0, height))
+        result.append(v_bottom - origin)
+        result.append(v_top - origin)
+    return result
+
+def generate_multiple_cylinder_verts(origins, segments, radius, bottom_height, height):
+    result = []
+    for i in range(0, len(origins)):
+        result.extend(generate_cylinder_verts(origins[i], segments, radius, bottom_height, height))
+    return result
+
+def get_origins(distance, x_count, y_count):
+    result = []
+    offset = Vector (((x_count - 1) * distance / 2, (y_count - 1) * distance / 2, 0))
+    for x in range(0, x_count):
+        for y in range(0, y_count):
+            origin = Vector((x * distance, y * distance, 0)) - offset
+            result.append(origin)
+    return result
+
 
 
 # Registration
