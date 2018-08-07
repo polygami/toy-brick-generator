@@ -10,7 +10,6 @@ bl_info = {
     "category": "Add Mesh",
     }
 
-
 import bpy
 from bpy.types import Operator
 from bpy.props import FloatVectorProperty, IntVectorProperty, BoolProperty
@@ -25,6 +24,7 @@ stud_radius = 0.24
 stud_segments = 12
 stud_height = 0.16
 tube_radius = 0.3256
+tube_segments = 12
 
 def add_object(self, context):
     scale_x = self.scale[0]
@@ -34,7 +34,6 @@ def add_object(self, context):
     scale_x *= h_unit_size
     scale_y *= h_unit_size
     scale_z *= v_unit_size
-
 
     verts = [
              # 0, 1, 2, 3 - Bottom Bounds
@@ -60,56 +59,31 @@ def add_object(self, context):
             ]
 
     edges = []
+    
     faces = [
              # Top
              [4, 7, 6, 5],
              # Sides
-             [0, 4, 5, 1],
-             [3, 7, 4, 0],
-             [2, 6, 7, 3],
-             [1, 5, 6, 2],
+             [0, 4, 5, 1], [3, 7, 4, 0], [2, 6, 7, 3], [1, 5, 6, 2],
              # Bottom Wall
-             [2, 3, 11, 10],
-             [0, 8, 11, 3],
-             [0, 1, 9, 8],
-             [1, 2, 10, 9],
+             [2, 3, 11, 10], [0, 8, 11, 3], [0, 1, 9, 8], [1, 2, 10, 9],
              # Top Wall
              [12, 13, 14, 15],
              # Inside Walls
-             [10, 11, 15, 14],
-             [9, 10, 14, 13],
-             [8, 9, 13, 12],
-             [8, 12, 15, 11],
+             [10, 11, 15, 14], [9, 10, 14, 13], [8, 9, 13, 12], [8, 12, 15, 11],
             ]
 
     # Add studs
-    stud_origins = []
-
-    tube_origins = get_origins(h_unit_size, self.scale[0] - 1, self.scale[1] - 1)
-    verts.extend(generate_multiple_cylinder_verts(tube_origins, 12, tube_radius, 0, scale_z - wall_thickness))
-
-
-    for x in range(0, self.scale[0]):
-        for y in range(0, self.scale[1]):
-            origin = Vector((
-                (h_unit_size / 2 + h_unit_size * float(x)) - float(scale_x) * 0.5,
-                (h_unit_size / 2 + h_unit_size * float(y)) - float(scale_y) * 0.5,
-                0)
-            )
-            
-            verts.extend(generate_cylinder_verts(origin, stud_segments, stud_radius, scale_z, stud_height))
-            print("Length:")
-            print(len(verts))
-            r_start = len(verts) - stud_segments * 2
-            for j in range (r_start, len(verts), 2):
-                face = [
-                    j,
-                    (j - r_start + 1) % 24 + r_start,
-                    (j - r_start + 3) % 24 + r_start,
-                    (j - r_start + 2) % 24 + r_start
-                ]
-                print(face)
-                faces.append(face)
+    stud_origins = get_origins(h_unit_size, self.scale[0], self.scale[1], scale_z)
+    studs = generate_cylinders(stud_origins, stud_segments, stud_radius, stud_height, len(verts))
+    verts.extend(studs.verts)
+    faces.extend(studs.faces)
+    
+    # Add tubes
+    tube_origins = get_origins(h_unit_size, self.scale[0] - 1, self.scale[1] - 1, 0)
+    tubes = generate_cylinders(tube_origins, tube_segments, tube_radius, scale_z - wall_thickness, len(verts))
+    verts.extend(tubes.verts)
+    faces.extend(tubes.faces)
 
     mesh = bpy.data.meshes.new(name="New Toy Brick")
     mesh.from_pydata(verts, edges, faces)
@@ -117,6 +91,12 @@ def add_object(self, context):
     # mesh.validate(verbose=True)
     object_data_add(context, mesh, operator=self)
 
+class MeshInfo(object):
+    """docstring for MeshInfo"""
+    def __init__(self, verts, faces):
+        self.verts = verts
+        self.faces = faces 
+        
 
 class OBJECT_OT_add_object(Operator, AddObjectHelper):
     """Create a new Mesh Object"""
@@ -138,32 +118,49 @@ class OBJECT_OT_add_object(Operator, AddObjectHelper):
 
         return {'FINISHED'}
 
-def generate_cylinder_verts(origin, segments, radius, bottom_height, height):
-    result = []
-    for i in range(0, segments):
-        angle = radians((360 / segments) * i)
-        v_bottom = Vector((sin(angle) * radius, cos(angle) * radius, bottom_height))
-        v_top = v_bottom + Vector((0, 0, height))
-        result.append(v_bottom - origin)
-        result.append(v_top - origin)
-    return result
-
-def generate_multiple_cylinder_verts(origins, segments, radius, bottom_height, height):
-    result = []
-    for i in range(0, len(origins)):
-        result.extend(generate_cylinder_verts(origins[i], segments, radius, bottom_height, height))
-    return result
-
-def get_origins(distance, x_count, y_count):
+def get_origins(distance, x_count, y_count, z_pos):
     result = []
     offset = Vector (((x_count - 1) * distance / 2, (y_count - 1) * distance / 2, 0))
     for x in range(0, x_count):
         for y in range(0, y_count):
-            origin = Vector((x * distance, y * distance, 0)) - offset
+            origin = Vector((x * distance, y * distance, z_pos)) - offset
             result.append(origin)
     return result
 
+def generate_cylinder_verts(origin, segments, radius, height):
+    print(origin.z)
+    result = []
+    for i in range(0, segments):
+        angle = radians((360 / segments) * i)
+        v_bottom = Vector((sin(angle) * radius, cos(angle) * radius, 0))
+        v_top = v_bottom + Vector((0, 0, height))
+        result.append(v_bottom + origin)
+        result.append(v_top + origin)
+    return result
 
+def connect_cylinder_verts(segments, length):
+    result = []
+    r_start = length - segments * 2
+    for j in range (r_start, length, 2):
+        result.append([
+            j,
+            (j - r_start + 1) % 24 + r_start,
+            (j - r_start + 3) % 24 + r_start,
+            (j - r_start + 2) % 24 + r_start
+        ])
+    return result
+
+def generate_cylinders(origins, segments, radius, height, verts_array_length):
+    verts = []
+    faces = []
+    for i in range(0, len(origins)):
+        verts.extend(generate_cylinder_verts(origins[i], segments, radius, height))
+        faces.extend(connect_cylinder_verts(segments, verts_array_length + len(verts)))
+    return MeshInfo(verts, faces)
+
+def print_collection(col):
+    for i in range(0, len(col)):
+        print (str(i) + " = " + str(col[i]))
 
 # Registration
 
@@ -173,7 +170,6 @@ def add_object_button(self, context):
         text="Add Toy Brick",
         icon='MOD_BUILD')
 
-
 # This allows you to right click on a button and link to the manual
 def add_object_manual_map():
     url_manual_prefix = "https://docs.blender.org/manual/en/dev/"
@@ -182,18 +178,15 @@ def add_object_manual_map():
         )
     return url_manual_prefix, url_manual_mapping
 
-
 def register():
     bpy.utils.register_class(OBJECT_OT_add_object)
     bpy.utils.register_manual_map(add_object_manual_map)
     bpy.types.INFO_MT_mesh_add.append(add_object_button)
 
-
 def unregister():
     bpy.utils.unregister_class(OBJECT_OT_add_object)
     bpy.utils.unregister_manual_map(add_object_manual_map)
     bpy.types.INFO_MT_mesh_add.remove(add_object_button)
-
 
 if __name__ == "__main__":
     register()
