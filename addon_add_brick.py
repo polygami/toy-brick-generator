@@ -25,7 +25,8 @@ stud_radius = 0.24
 stud_segments = 12
 stud_height = 0.16
 # stud_caps = [CapType.NONE, CapType.FAN]
-tube_radius = 0.3256
+tube_outer_radius = 0.3256
+tube_inner_radius = 0.24
 tube_segments = 12
 # tube_caps = [CapType.NONE, CapType.NONE]
 
@@ -84,7 +85,7 @@ def add_object(self, context):
     
     # Add tubes
     tube_origins = get_origins(h_unit_size, self.scale[0] - 1, self.scale[1] - 1, 0)
-    tubes = generate_cylinders(tube_origins, tube_segments, tube_radius, scale_z - wall_thickness, len(verts), False, False)
+    tubes = generate_hollow_cylinders(tube_origins, tube_segments, tube_outer_radius, tube_inner_radius, scale_z - wall_thickness, len(verts), True, True)
     verts.extend(tubes.verts)
     faces.extend(tubes.faces)
 
@@ -135,7 +136,6 @@ def get_origins(distance, x_count, y_count, z_pos):
     return result
 
 def generate_cylinder_verts(origin, segments, radius, height):
-    print(origin.z)
     result = []
     for i in range(0, segments):
         angle = radians((360 / segments) * i)
@@ -143,6 +143,20 @@ def generate_cylinder_verts(origin, segments, radius, height):
         v_top = v_bottom + Vector((0, 0, height))
         result.append(v_bottom + origin)
         result.append(v_top + origin)
+    return result
+
+def generate_hollow_cylinder_verts(origin, segments, outer_radius, inner_radius, height):
+    result = []
+    for i in range(0, segments):
+        angle = radians((360 / segments) * i)
+        btm_out = Vector((sin(angle) * outer_radius, cos(angle) * outer_radius, 0))
+        btm_in  = Vector((sin(angle) * inner_radius, cos(angle) * inner_radius, 0))
+        top_out = btm_out + Vector((0, 0, height))
+        top_in  = btm_in + Vector((0, 0, height))
+        result.append(btm_out + origin)
+        result.append(top_out + origin)
+        result.append(btm_in + origin)
+        result.append(top_in + origin)
     return result
 
 def connect_cylinder_verts(segments, length, bottom_cap, top_cap):
@@ -170,6 +184,39 @@ def connect_cylinder_verts(segments, length, bottom_cap, top_cap):
             ])
     return result
 
+def connect_hollow_cylinder_verts(segments, length, bottom_cap, top_cap):
+    result = []
+    segments_doubled = segments * 4
+    r_start = length - segments_doubled
+    for j in range (r_start, length, 4):
+        result.append([
+            j,
+            (j - r_start + 1) % segments_doubled + r_start,
+            (j - r_start + 5) % segments_doubled + r_start,
+            (j - r_start + 4) % segments_doubled + r_start
+        ])
+        result.append([
+            (j - r_start + 6) % segments_doubled + r_start,
+            (j - r_start + 7) % segments_doubled + r_start,
+            (j - r_start + 3) % segments_doubled + r_start,
+            (j - r_start + 2) % segments_doubled + r_start
+        ])
+        if (bottom_cap):
+            result.append([
+                (j - r_start + 4) % segments_doubled + r_start,
+                (j - r_start + 6) % segments_doubled + r_start,
+                (j - r_start + 2) % segments_doubled + r_start,
+                (j - r_start + 0) % segments_doubled + r_start
+            ])
+        if (top_cap):
+            result.append([
+                (j - r_start + 1) % segments_doubled + r_start,
+                (j - r_start + 3) % segments_doubled + r_start,
+                (j - r_start + 7) % segments_doubled + r_start,
+                (j - r_start + 5) % segments_doubled + r_start
+            ])
+    return result
+
 def generate_cylinders(origins, segments, radius, height, verts_array_length, bottom_cap, top_cap):
     verts = []
     faces = []
@@ -180,6 +227,14 @@ def generate_cylinders(origins, segments, radius, height, verts_array_length, bo
             verts.append(origins[i] + Vector((0, 0, height)))
         verts.extend(generate_cylinder_verts(origins[i], segments, radius, height))
         faces.extend(connect_cylinder_verts(segments, verts_array_length + len(verts), bottom_cap, top_cap))
+    return MeshInfo(verts, faces)
+
+def generate_hollow_cylinders(origins, segments, outer_radius, inner_radius, height, verts_array_length, bottom_cap, top_cap):
+    verts = []
+    faces = []
+    for i in range(0, len(origins)):
+        verts.extend(generate_hollow_cylinder_verts(origins[i], segments, outer_radius, inner_radius, height))
+        faces.extend(connect_hollow_cylinder_verts(segments, verts_array_length + len(verts), bottom_cap, top_cap))
     return MeshInfo(verts, faces)
 
 def print_collection(col):
