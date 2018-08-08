@@ -15,13 +15,14 @@ from bpy.types import Operator
 from bpy.props import FloatVectorProperty, IntVectorProperty, BoolProperty
 from bpy_extras.object_utils import AddObjectHelper, object_data_add
 from mathutils import Vector
-from math import sin, cos, tan, radians
+from math import sin, cos, tan, radians, isclose
 from enum import Enum
 
 h_unit_size = 0.8
 v_unit_size = 0.96
 wall_thickness = 0.16
-stud_radius = 0.24
+stud_outer_radius = 0.24
+stud_inner_radius = 0
 stud_segments = 12
 stud_height = 0.16
 # stud_caps = [CapType.NONE, CapType.FAN]
@@ -79,13 +80,13 @@ def add_object(self, context):
 
     # Add studs
     stud_origins = get_origins(h_unit_size, self.scale[0], self.scale[1], scale_z)
-    studs = generate_cylinders(stud_origins, stud_segments, stud_radius, stud_height, len(verts), True, True)
+    studs = generate_cylinders(stud_origins, stud_segments, stud_outer_radius, stud_inner_radius, stud_height, len(verts), False, True)
     verts.extend(studs.verts)
     faces.extend(studs.faces)
     
     # Add tubes
     tube_origins = get_origins(h_unit_size, self.scale[0] - 1, self.scale[1] - 1, 0)
-    tubes = generate_hollow_cylinders(tube_origins, tube_segments, tube_outer_radius, tube_inner_radius, scale_z - wall_thickness, len(verts), True, True)
+    tubes = generate_cylinders(tube_origins, tube_segments, tube_outer_radius, tube_inner_radius, scale_z - wall_thickness, len(verts), True, False)
     verts.extend(tubes.verts)
     faces.extend(tubes.faces)
 
@@ -94,6 +95,9 @@ def add_object(self, context):
     # useful for development when the mesh may be invalid.
     # mesh.validate(verbose=True)
     object_data_add(context, mesh, operator=self)
+    mesh.use_auto_smooth = 1
+    mesh.auto_smooth_angle = radians(80)
+    bpy.ops.object.shade_smooth()
 
 # class CapType(Enum):
 #     NONE = 1
@@ -135,106 +139,105 @@ def get_origins(distance, x_count, y_count, z_pos):
             result.append(origin)
     return result
 
-def generate_cylinder_verts(origin, segments, radius, height):
+def generate_cylinder_verts(origin, segments, outer_radius, inner_radius, height):
     result = []
-    for i in range(0, segments):
-        angle = radians((360 / segments) * i)
-        v_bottom = Vector((sin(angle) * radius, cos(angle) * radius, 0))
-        v_top = v_bottom + Vector((0, 0, height))
-        result.append(v_bottom + origin)
-        result.append(v_top + origin)
-    return result
-
-def generate_hollow_cylinder_verts(origin, segments, outer_radius, inner_radius, height):
-    result = []
+    is_hollow = inner_radius != 0
     for i in range(0, segments):
         angle = radians((360 / segments) * i)
         btm_out = Vector((sin(angle) * outer_radius, cos(angle) * outer_radius, 0))
-        btm_in  = Vector((sin(angle) * inner_radius, cos(angle) * inner_radius, 0))
         top_out = btm_out + Vector((0, 0, height))
-        top_in  = btm_in + Vector((0, 0, height))
         result.append(btm_out + origin)
         result.append(top_out + origin)
-        result.append(btm_in + origin)
-        result.append(top_in + origin)
+        if (is_hollow):
+            btm_in  = Vector((sin(angle) * inner_radius, cos(angle) * inner_radius, 0))
+            top_in  = btm_in + Vector((0, 0, height))
+            result.append(btm_in + origin)
+            result.append(top_in + origin)
     return result
 
-def connect_cylinder_verts(segments, length, bottom_cap, top_cap):
+def connect_cylinder_verts(segments, length, bottom_cap, top_cap, is_hollow):
     result = []
-    segments_doubled = segments * 2
-    r_start = length - segments_doubled
-    for j in range (r_start, length, 2):
-        result.append([
-            j,
-            (j - r_start + 1) % segments_doubled + r_start,
-            (j - r_start + 3) % segments_doubled + r_start,
-            (j - r_start + 2) % segments_doubled + r_start
-        ])
-        if (bottom_cap):
+    increment = 4 if is_hollow else 2
+    vert_count = segments * increment
+    r_start = length - vert_count
+    for j in range (r_start, length, increment):
+
+        if is_hollow:
             result.append([
                 j,
-                (j - r_start + 2) % segments_doubled + r_start,
-                r_start - 1 - int(top_cap)
+                (j - r_start + 1) % vert_count + r_start,
+                (j - r_start + 5) % vert_count + r_start,
+                (j - r_start + 4) % vert_count + r_start
             ])
-        if (top_cap):
             result.append([
-                (j - r_start + 3) % segments_doubled + r_start,
-                (j - r_start + 1) % segments_doubled + r_start,
-                r_start - 1
+                (j - r_start + 6) % vert_count + r_start,
+                (j - r_start + 7) % vert_count + r_start,
+                (j - r_start + 3) % vert_count + r_start,
+                (j - r_start + 2) % vert_count + r_start
             ])
+            if (bottom_cap):
+                result.append([
+                    (j - r_start + 4) % vert_count + r_start,
+                    (j - r_start + 6) % vert_count + r_start,
+                    (j - r_start + 2) % vert_count + r_start,
+                    (j - r_start + 0) % vert_count + r_start
+                ])
+            if (top_cap):
+                result.append([
+                    (j - r_start + 1) % vert_count + r_start,
+                    (j - r_start + 3) % vert_count + r_start,
+                    (j - r_start + 7) % vert_count + r_start,
+                    (j - r_start + 5) % vert_count + r_start
+                ])
+        else:
+            result.append([
+                j,
+                (j - r_start + 1) % vert_count + r_start,
+                (j - r_start + 3) % vert_count + r_start,
+                (j - r_start + 2) % vert_count + r_start
+            ])
+            if (bottom_cap):
+                result.append([
+                    j,
+                    (j - r_start + 2) % vert_count + r_start,
+                    r_start - 1 - int(top_cap)
+                ])
+            if (top_cap):
+                result.append([
+                    (j - r_start + 3) % vert_count + r_start,
+                    (j - r_start + 1) % vert_count + r_start,
+                    r_start - 1
+                ])
+
     return result
 
-def connect_hollow_cylinder_verts(segments, length, bottom_cap, top_cap):
-    result = []
-    segments_doubled = segments * 4
-    r_start = length - segments_doubled
-    for j in range (r_start, length, 4):
-        result.append([
-            j,
-            (j - r_start + 1) % segments_doubled + r_start,
-            (j - r_start + 5) % segments_doubled + r_start,
-            (j - r_start + 4) % segments_doubled + r_start
-        ])
-        result.append([
-            (j - r_start + 6) % segments_doubled + r_start,
-            (j - r_start + 7) % segments_doubled + r_start,
-            (j - r_start + 3) % segments_doubled + r_start,
-            (j - r_start + 2) % segments_doubled + r_start
-        ])
-        if (bottom_cap):
-            result.append([
-                (j - r_start + 4) % segments_doubled + r_start,
-                (j - r_start + 6) % segments_doubled + r_start,
-                (j - r_start + 2) % segments_doubled + r_start,
-                (j - r_start + 0) % segments_doubled + r_start
-            ])
-        if (top_cap):
-            result.append([
-                (j - r_start + 1) % segments_doubled + r_start,
-                (j - r_start + 3) % segments_doubled + r_start,
-                (j - r_start + 7) % segments_doubled + r_start,
-                (j - r_start + 5) % segments_doubled + r_start
-            ])
-    return result
+# def generate_cylinders(origins, segments, radius, height, verts_array_length, bottom_cap, top_cap):
+#     verts = []
+#     faces = []
+#     for i in range(0, len(origins)):
+#         if (inner_radius == 0):
+#             if (bottom_cap):
+#                 verts.append(origins[i])
+#             if (top_cap):
+#                 verts.append(origins[i] + Vector((0, 0, height)))
+#         verts.extend(generate_cylinder_verts(origins[i], segments, radius, height))
+#         faces.extend(connect_cylinder_verts(segments, verts_array_length + len(verts), bottom_cap, top_cap))
+#     return MeshInfo(verts, faces)
 
-def generate_cylinders(origins, segments, radius, height, verts_array_length, bottom_cap, top_cap):
+def generate_cylinders(origins, segments, outer_radius, inner_radius, height, verts_array_length, bottom_cap, top_cap):
     verts = []
     faces = []
+    is_hollow = inner_radius != 0
+    print(is_hollow)
     for i in range(0, len(origins)):
-        if (bottom_cap):
-            verts.append(origins[i])
-        if (top_cap):
-            verts.append(origins[i] + Vector((0, 0, height)))
-        verts.extend(generate_cylinder_verts(origins[i], segments, radius, height))
-        faces.extend(connect_cylinder_verts(segments, verts_array_length + len(verts), bottom_cap, top_cap))
-    return MeshInfo(verts, faces)
-
-def generate_hollow_cylinders(origins, segments, outer_radius, inner_radius, height, verts_array_length, bottom_cap, top_cap):
-    verts = []
-    faces = []
-    for i in range(0, len(origins)):
-        verts.extend(generate_hollow_cylinder_verts(origins[i], segments, outer_radius, inner_radius, height))
-        faces.extend(connect_hollow_cylinder_verts(segments, verts_array_length + len(verts), bottom_cap, top_cap))
+        if (not is_hollow):
+            if (bottom_cap):
+                verts.append(origins[i])
+            if (top_cap):
+                verts.append(origins[i] + Vector((0, 0, height)))
+        verts.extend(generate_cylinder_verts(origins[i], segments, outer_radius, inner_radius, height))
+        faces.extend(connect_cylinder_verts(segments, verts_array_length + len(verts), bottom_cap, top_cap, is_hollow))
+    # print_collection(verts)
     return MeshInfo(verts, faces)
 
 def print_collection(col):
