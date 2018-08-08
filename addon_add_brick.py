@@ -12,7 +12,7 @@ bl_info = {
 
 import bpy
 from bpy.types import Operator
-from bpy.props import FloatVectorProperty, IntVectorProperty, BoolProperty
+from bpy.props import FloatVectorProperty, IntVectorProperty, BoolProperty, IntProperty, FloatProperty
 from bpy_extras.object_utils import AddObjectHelper, object_data_add
 from mathutils import Vector
 from math import sin, cos, tan, radians, isclose
@@ -25,20 +25,18 @@ stud_outer_radius = 0.24
 stud_inner_radius = 0
 stud_segments = 12
 stud_height = 0.16
-# stud_caps = [CapType.NONE, CapType.FAN]
 tube_outer_radius = 0.3256
 tube_inner_radius = 0.24
 tube_segments = 12
-# tube_caps = [CapType.NONE, CapType.NONE]
 
 def add_object(self, context):
     scale_x = self.scale[0]
     scale_y = self.scale[1]
     scale_z = self.scale[2]
 
-    scale_x *= h_unit_size
-    scale_y *= h_unit_size
-    scale_z *= v_unit_size
+    scale_x *= self.h_unit_size
+    scale_y *= self.h_unit_size
+    scale_z *= self.v_unit_size
 
     verts = [
              # 0, 1, 2, 3 - Bottom Bounds
@@ -52,15 +50,15 @@ def add_object(self, context):
              Vector((0.5 * scale_x, -0.5 * scale_y, 1 * scale_z)),
              Vector((-0.5 * scale_x, -0.5 * scale_y, 1 * scale_z)),
              # 8, 9, 10, 11 - Inside Bottom Wall
-             Vector(((-0.5 * scale_x) + wall_thickness, (0.5 * scale_y) - wall_thickness , 0)),
-             Vector(((0.5 * scale_x) - wall_thickness, (0.5 * scale_y) - wall_thickness , 0)),
-             Vector(((0.5 * scale_x) - wall_thickness, (-0.5 * scale_y) + wall_thickness, 0)),
-             Vector(((-0.5 * scale_x) + wall_thickness, (-0.5 * scale_y) + wall_thickness, 0)),
+             Vector(((-0.5 * scale_x) + self.wall_width, (0.5 * scale_y) - self.wall_width , 0)),
+             Vector(((0.5 * scale_x) - self.wall_width, (0.5 * scale_y) - self.wall_width , 0)),
+             Vector(((0.5 * scale_x) - self.wall_width, (-0.5 * scale_y) + self.wall_width, 0)),
+             Vector(((-0.5 * scale_x) + self.wall_width, (-0.5 * scale_y) + self.wall_width, 0)),
              # 12, 13, 14, 15 - Inside Top Wall
-             Vector(((-0.5 * scale_x) + wall_thickness, (0.5 * scale_y) - wall_thickness , 1 * scale_z - wall_thickness)),
-             Vector(((0.5 * scale_x) - wall_thickness, (0.5 * scale_y) - wall_thickness , 1 * scale_z - wall_thickness)),
-             Vector(((0.5 * scale_x) - wall_thickness, (-0.5 * scale_y) + wall_thickness, 1 * scale_z - wall_thickness)),
-             Vector(((-0.5 * scale_x) + wall_thickness, (-0.5 * scale_y) + wall_thickness, 1 * scale_z - wall_thickness)),
+             Vector(((-0.5 * scale_x) + self.wall_width, (0.5 * scale_y) - self.wall_width , 1 * scale_z - self.wall_width)),
+             Vector(((0.5 * scale_x) - self.wall_width, (0.5 * scale_y) - self.wall_width , 1 * scale_z - self.wall_width)),
+             Vector(((0.5 * scale_x) - self.wall_width, (-0.5 * scale_y) + self.wall_width, 1 * scale_z - self.wall_width)),
+             Vector(((-0.5 * scale_x) + self.wall_width, (-0.5 * scale_y) + self.wall_width, 1 * scale_z - self.wall_width)),
             ]
 
     edges = []
@@ -79,14 +77,14 @@ def add_object(self, context):
             ]
 
     # Add studs
-    stud_origins = get_origins(h_unit_size, self.scale[0], self.scale[1], scale_z)
-    studs = generate_cylinders(stud_origins, stud_segments, stud_outer_radius, stud_inner_radius, stud_height, len(verts), False, True)
+    stud_origins = get_origins(self.h_unit_size, self.scale[0], self.scale[1], scale_z)
+    studs = generate_cylinders(stud_origins, self.stud_segments, self.stud_outer_radius, self.stud_inner_radius, self.stud_height, len(verts), False, True)
     verts.extend(studs.verts)
     faces.extend(studs.faces)
     
     # Add tubes
-    tube_origins = get_origins(h_unit_size, self.scale[0] - 1, self.scale[1] - 1, 0)
-    tubes = generate_cylinders(tube_origins, tube_segments, tube_outer_radius, tube_inner_radius, scale_z - wall_thickness, len(verts), True, False)
+    tube_origins = get_origins(self.h_unit_size, self.scale[0] - 1, self.scale[1] - 1, 0)
+    tubes = generate_cylinders(tube_origins, self.tube_segments, self.tube_outer_radius, self.tube_inner_radius, scale_z - self.wall_width, len(verts), True, False)
     verts.extend(tubes.verts)
     faces.extend(tubes.faces)
 
@@ -116,13 +114,74 @@ class OBJECT_OT_add_object(Operator, AddObjectHelper):
     bl_label = "Add Mesh Object"
     bl_options = {'REGISTER', 'UNDO'}
 
-    scale = IntVectorProperty(
-            name="scale",
-            default=(2.0, 4.0, 1.0),
-            soft_min=1,
-            # subtype='XYZ',
-            description="scaling",
-            )
+    scale         = IntVectorProperty(
+                    name="Scale",
+                    default=(2.0, 4.0, 1.0),
+                    soft_min=1,
+                    description="scaling",
+                    )
+
+    h_unit_size   = FloatProperty(
+                    name="Horizontal Unit Size",
+                    default= 0.8,
+                    soft_min=0.01,
+                    description="scaling",
+                    )
+    v_unit_size   = FloatProperty(
+                    name="Vertical Unit Size",
+                    default= 0.96,
+                    soft_min=0.01,
+                    description="scaling",
+                    )
+    wall_width    = FloatProperty(
+                    name="Wall Width",
+                    default= 0.16,
+                    soft_min=0.01,
+                    description="scaling",
+                    )
+    stud_outer_radius   = FloatProperty(
+                    name="Stud Outer Radius",
+                    default= 0.24,
+                    soft_min=0.01,
+                    description="scaling",
+                    )
+    stud_inner_radius   = FloatProperty(
+                    name="Stud Inner Radius",
+                    default= 0,
+                    soft_min=0,
+                    description="scaling",
+                    )
+    stud_segments   = IntProperty(
+                    name="Stud Segments",
+                    default= 12,
+                    soft_min=0,
+                    description="scaling",
+                    )
+    stud_height   = FloatProperty(
+                    name="Stud Height",
+                    default= 0.16,
+                    soft_min=0,
+                    description="scaling",
+                    )
+    tube_outer_radius   = FloatProperty(
+                    name="Tube Outer Radius",
+                    default= 0.3256,
+                    soft_min=0.01,
+                    description="scaling",
+                    )
+    tube_inner_radius   = FloatProperty(
+                    name="Tube Inner Radius",
+                    default= 0.24,
+                    soft_min=0,
+                    description="scaling",
+                    )
+    tube_segments   = IntProperty(
+                    name="Tube Segments",
+                    default= 12,
+                    soft_min=0,
+                    description="scaling",
+                    )
+
 
     def execute(self, context):
 
@@ -210,19 +269,6 @@ def connect_cylinder_verts(segments, length, bottom_cap, top_cap, is_hollow):
                 ])
 
     return result
-
-# def generate_cylinders(origins, segments, radius, height, verts_array_length, bottom_cap, top_cap):
-#     verts = []
-#     faces = []
-#     for i in range(0, len(origins)):
-#         if (inner_radius == 0):
-#             if (bottom_cap):
-#                 verts.append(origins[i])
-#             if (top_cap):
-#                 verts.append(origins[i] + Vector((0, 0, height)))
-#         verts.extend(generate_cylinder_verts(origins[i], segments, radius, height))
-#         faces.extend(connect_cylinder_verts(segments, verts_array_length + len(verts), bottom_cap, top_cap))
-#     return MeshInfo(verts, faces)
 
 def generate_cylinders(origins, segments, outer_radius, inner_radius, height, verts_array_length, bottom_cap, top_cap):
     verts = []
