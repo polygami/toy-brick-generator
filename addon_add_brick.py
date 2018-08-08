@@ -16,6 +16,7 @@ from bpy.props import FloatVectorProperty, IntVectorProperty, BoolProperty
 from bpy_extras.object_utils import AddObjectHelper, object_data_add
 from mathutils import Vector
 from math import sin, cos, tan, radians
+from enum import Enum
 
 h_unit_size = 0.8
 v_unit_size = 0.96
@@ -23,8 +24,10 @@ wall_thickness = 0.16
 stud_radius = 0.24
 stud_segments = 12
 stud_height = 0.16
+# stud_caps = [CapType.NONE, CapType.FAN]
 tube_radius = 0.3256
 tube_segments = 12
+# tube_caps = [CapType.NONE, CapType.NONE]
 
 def add_object(self, context):
     scale_x = self.scale[0]
@@ -59,7 +62,7 @@ def add_object(self, context):
             ]
 
     edges = []
-    
+
     faces = [
              # Top
              [4, 7, 6, 5],
@@ -75,13 +78,13 @@ def add_object(self, context):
 
     # Add studs
     stud_origins = get_origins(h_unit_size, self.scale[0], self.scale[1], scale_z)
-    studs = generate_cylinders(stud_origins, stud_segments, stud_radius, stud_height, len(verts))
+    studs = generate_cylinders(stud_origins, stud_segments, stud_radius, stud_height, len(verts), True, True)
     verts.extend(studs.verts)
     faces.extend(studs.faces)
     
     # Add tubes
     tube_origins = get_origins(h_unit_size, self.scale[0] - 1, self.scale[1] - 1, 0)
-    tubes = generate_cylinders(tube_origins, tube_segments, tube_radius, scale_z - wall_thickness, len(verts))
+    tubes = generate_cylinders(tube_origins, tube_segments, tube_radius, scale_z - wall_thickness, len(verts), False, False)
     verts.extend(tubes.verts)
     faces.extend(tubes.faces)
 
@@ -91,12 +94,16 @@ def add_object(self, context):
     # mesh.validate(verbose=True)
     object_data_add(context, mesh, operator=self)
 
+# class CapType(Enum):
+#     NONE = 1
+#     NGON = 2
+#     FAN = 3
+
 class MeshInfo(object):
     """docstring for MeshInfo"""
     def __init__(self, verts, faces):
         self.verts = verts
-        self.faces = faces 
-        
+        self.faces = faces     
 
 class OBJECT_OT_add_object(Operator, AddObjectHelper):
     """Create a new Mesh Object"""
@@ -138,24 +145,41 @@ def generate_cylinder_verts(origin, segments, radius, height):
         result.append(v_top + origin)
     return result
 
-def connect_cylinder_verts(segments, length):
+def connect_cylinder_verts(segments, length, bottom_cap, top_cap):
     result = []
-    r_start = length - segments * 2
+    segments_doubled = segments * 2
+    r_start = length - segments_doubled
     for j in range (r_start, length, 2):
         result.append([
             j,
-            (j - r_start + 1) % 24 + r_start,
-            (j - r_start + 3) % 24 + r_start,
-            (j - r_start + 2) % 24 + r_start
+            (j - r_start + 1) % segments_doubled + r_start,
+            (j - r_start + 3) % segments_doubled + r_start,
+            (j - r_start + 2) % segments_doubled + r_start
         ])
+        if (bottom_cap):
+            result.append([
+                j,
+                (j - r_start + 2) % segments_doubled + r_start,
+                r_start - 1 - int(top_cap)
+            ])
+        if (top_cap):
+            result.append([
+                (j - r_start + 3) % segments_doubled + r_start,
+                (j - r_start + 1) % segments_doubled + r_start,
+                r_start - 1
+            ])
     return result
 
-def generate_cylinders(origins, segments, radius, height, verts_array_length):
+def generate_cylinders(origins, segments, radius, height, verts_array_length, bottom_cap, top_cap):
     verts = []
     faces = []
     for i in range(0, len(origins)):
+        if (bottom_cap):
+            verts.append(origins[i])
+        if (top_cap):
+            verts.append(origins[i] + Vector((0, 0, height)))
         verts.extend(generate_cylinder_verts(origins[i], segments, radius, height))
-        faces.extend(connect_cylinder_verts(segments, verts_array_length + len(verts)))
+        faces.extend(connect_cylinder_verts(segments, verts_array_length + len(verts), bottom_cap, top_cap))
     return MeshInfo(verts, faces)
 
 def print_collection(col):
